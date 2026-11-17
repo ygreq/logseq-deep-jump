@@ -1,4 +1,5 @@
 import '@logseq/libs';
+import type { BlockEntity } from '@logseq/libs/dist/LSPlugin.user';
 import { expandBlockAncestors } from './search';
 
 export interface JumpOptions {
@@ -66,8 +67,45 @@ function nextFrame(doc: Document): Promise<void> {
 }
 
 /**
- * Navigate to `pageName` and force-scroll until `blockUuid` is rendered in the DOM,
- * then center and highlight it.
+ * Estimate the target block's vertical position ratio (0..1) on the page
+ * by finding its position in the page's block tree.
+ */
+async function estimateBlockRatio(
+  pageName: string,
+  blockUuid: string
+): Promise<number | null> {
+  try {
+    const tree = await logseq.Editor.getPageBlocksTree(pageName);
+    if (!tree || tree.length === 0) return null;
+
+    let total = 0;
+    let foundIndex = -1;
+
+    const walk = (nodes: BlockEntity[]) => {
+      for (const node of nodes) {
+        if (node.uuid === blockUuid) {
+          foundIndex = total;
+        }
+        total++;
+        if (node.children && node.children.length > 0) {
+          walk(node.children as BlockEntity[]);
+        }
+      }
+    };
+
+    walk(tree);
+    if (foundIndex < 0 || total <= 1) return null;
+    return foundIndex / (total - 1);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Navigate to `pageName` and jump directly to `blockUuid`.
+ * If Logseq's lazy loader has not mounted the block yet, first tries a direct
+ * ratio jump, then fast-loads remaining lazy chunks at the bottom sentinel
+ * until the block appears, and snaps straight to it.
  */
 export async function jumpToBlock(
   pageName: string,
@@ -85,13 +123,12 @@ export async function jumpToBlock(
     return false;
   }
 
-  opts.onStatus?.('Navigating to page...');
+  opts.onStatus?.('Jumping to note...');
   await logseq.App.pushState('page', { name: pageName });
-  await sleep(160);
+  await sleep(120);
 
-  opts.onStatus?.('Expanding collapsed parent blocks...');
   await expandBlockAncestors(blockUuid);
-  await sleep(100);
+  await nextFrame(doc);
 
   const container = findMainScrollContainer(doc);
   if (!container) {
@@ -99,65 +136,56 @@ export async function jumpToBlock(
     return false;
   }
 
-  // Check if already rendered in the DOM
+  // 1. Check if already rendered in the DOM
   let target = findBlockElement(doc, blockUuid);
   if (target) {
     await centerAndHighlight(doc, target);
     return true;
   }
 
-  // Start from the top and progressively scroll down to trigger lazy-loading
-  opts.onStatus?.('Loading page blocks and scanning...');
-  container.scrollTop = 0;
-  await nextFrame(doc);
-  await sleep(80);
+  // 2. Direct ratio jump: jump straight to the estimated position on the page
+  const ratio = await estimateBlockRatio(pageName, blockUuid);
+  if (ratio !== null) {
+    const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+    container.scrollTop = Math.floor(maxScroll * ratio);
+    await nextFrame(doc);
+    await sleep(60);
 
-  const maxSteps = 180;
+    target = findBlockElement(doc, blockUuid);
+    if (target) {
+      await centerAndHighlight(doc, target);
+      return true;
+    }
+  }
+
+  // 3. Fast sequential sentinel trigger: jump directly to the bottom of the
+  //    currently loaded content on each tick so lazy-loaded chunks mount as fast as possible.
   let stagnantCount = 0;
-  let lastScrollTop = -1;
-
-  for (let step = 0; step < maxSteps; step++) {
+  for (let step = 0; step < 120; step++) {
     target = findBlockElement(doc, blockUuid);
     if (target) {
       await centerAndHighlight(doc, target);
       return true;
     }
 
-    const stepSize = Math.max(300, Math.floor(container.clientHeight * 0.85));
-    const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+    const prevHeight = container.scrollHeight;
+    container.scrollTop = container.scrollHeight;
+    await nextFrame(doc);
+    await sleep(25);
 
-    if (container.scrollTop >= maxScroll - 2) {
-      // Wait one more beat for any pending lazy-load batch at the bottom
-      await sleep(140);
-      target = findBlockElement(doc, blockUuid);
-      if (target) {
-        await centerAndHighlight(doc, target);
-        return true;
-      }
-
-      if (container.scrollHeight - container.clientHeight <= maxScroll + 2) {
-        stagnantCount++;
-        if (stagnantCount >= 3) break;
-      } else {
-        stagnantCount = 0;
-      }
+    target = findBlockElement(doc, blockUuid);
+    if (target) {
+      await centerAndHighlight(doc, target);
+      return true;
     }
 
-    lastScrollTop = container.scrollTop;
-    container.scrollTop = Math.min(
-      container.scrollTop + stepSize,
-      container.scrollHeight
-    );
-
-    if (container.scrollTop === lastScrollTop) {
+    if (container.scrollHeight === prevHeight) {
       stagnantCount++;
-      if (stagnantCount >= 3) break;
+      if (stagnantCount >= 4) break;
+      await sleep(50);
     } else {
       stagnantCount = 0;
     }
-
-    await nextFrame(doc);
-    await sleep(75);
   }
 
   // Final check before fallback
@@ -177,9 +205,10 @@ export async function jumpToBlock(
 }
 
 async function centerAndHighlight(doc: Document, el: HTMLElement): Promise<void> {
-  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  await sleep(260);
-  // Re-center once in case lazy-loaded content above shifted layout heights
+  el.scrollIntoView({ behavior: 'auto', block: 'center' });
+  await nextFrame(doc);
+  await sleep(120);
+  // Re-center once in case newly mounted blocks shifted layout heights
   el.scrollIntoView({ behavior: 'auto', block: 'center' });
   highlightBlockElement(doc, el);
 }
@@ -198,22 +227,17 @@ export async function forceLoadEntirePage(): Promise<void> {
   const originalTop = container.scrollTop;
   await logseq.UI.showMsg('Loading all blocks on this page...', 'info');
 
-  container.scrollTop = 0;
-  await sleep(80);
-
   let stagnant = 0;
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < 150; i++) {
     const prevHeight = container.scrollHeight;
-    const stepSize = Math.max(350, Math.floor(container.clientHeight * 0.9));
-    container.scrollTop += stepSize;
+    container.scrollTop = container.scrollHeight;
     await nextFrame(doc);
-    await sleep(65);
+    await sleep(25);
 
-    const atBottom =
-      container.scrollTop + container.clientHeight >= container.scrollHeight - 4;
-    if (atBottom && container.scrollHeight === prevHeight) {
+    if (container.scrollHeight === prevHeight) {
       stagnant++;
-      if (stagnant >= 3) break;
+      if (stagnant >= 4) break;
+      await sleep(50);
     } else {
       stagnant = 0;
     }
