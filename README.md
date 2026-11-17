@@ -1,7 +1,10 @@
 # Deep Jump (Search & Force-Scroll) for Logseq
 
 <p align="center">
-  <img src="icon.svg" width="84" height="84" alt="Deep Jump icon" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="branding/logo-stacked-dark.svg" />
+    <img src="branding/logo-stacked.svg" width="220" alt="Deep Jump logo" />
+  </picture>
 </p>
 
 ## About
