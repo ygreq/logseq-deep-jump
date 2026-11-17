@@ -19,9 +19,10 @@ function getHostDocument(): Document | null {
 
 export function findBlockElement(doc: Document, blockUuid: string): HTMLElement | null {
   const escaped = CSS.escape(blockUuid);
+  const scope: ParentNode = findMainScrollContainer(doc) ?? doc;
   return (
-    doc.querySelector<HTMLElement>(`[blockid="${escaped}"]`) ??
-    doc.querySelector<HTMLElement>(`#block-content-${escaped}`)
+    scope.querySelector<HTMLElement>(`[blockid="${escaped}"]`) ??
+    scope.querySelector<HTMLElement>(`#block-content-${escaped}`)
   );
 }
 
@@ -158,10 +159,10 @@ export async function jumpToBlock(
     }
   }
 
-  // 3. Fast sequential sentinel trigger: jump directly to the bottom of the
-  //    currently loaded content on each tick so lazy-loaded chunks mount as fast as possible.
+  // 3. Fast sequential sentinel trigger: scroll to the bottom of the currently
+  //    loaded content so the lazy-load sentinel sits inside the viewport.
   let stagnantCount = 0;
-  for (let step = 0; step < 120; step++) {
+  for (let step = 0; step < 150; step++) {
     target = findBlockElement(doc, blockUuid);
     if (target) {
       await centerAndHighlight(doc, target);
@@ -169,9 +170,9 @@ export async function jumpToBlock(
     }
 
     const prevHeight = container.scrollHeight;
-    container.scrollTop = container.scrollHeight;
+    container.scrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
     await nextFrame(doc);
-    await sleep(25);
+    await sleep(35);
 
     target = findBlockElement(doc, blockUuid);
     if (target) {
@@ -181,8 +182,8 @@ export async function jumpToBlock(
 
     if (container.scrollHeight === prevHeight) {
       stagnantCount++;
-      if (stagnantCount >= 4) break;
-      await sleep(50);
+      if (stagnantCount >= 8) break;
+      await sleep(100);
     } else {
       stagnantCount = 0;
     }
