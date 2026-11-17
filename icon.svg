@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <title>Deep Jump logo</title>
+  <rect x="12" y="12" width="232" height="232" rx="52" fill="#2563EB" />
+  <rect x="48" y="54" width="160" height="22" rx="11" fill="#FFFFFF" />
+  <rect x="48" y="102" width="62" height="22" rx="11" fill="#FFFFFF" />
+  <rect x="146" y="102" width="62" height="22" rx="11" fill="#FFFFFF" />
+  <path d="M128 90 L128 160" stroke="#93C5FD" stroke-width="20" stroke-linecap="round" />
+  <path d="M96 132 L128 164 L160 132" fill="none" stroke="#93C5FD" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="64" cy="196" r="16" fill="#93C5FD" />
+  <rect x="96" y="185" width="112" height="22" rx="11" fill="#FFFFFF" />
+</svg>
