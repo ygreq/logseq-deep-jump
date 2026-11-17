@@ -21,4 +21,4 @@ A Logseq plugin that solves the issue where jumping to a note on a massive journ
 2. In Logseq Desktop:
    - Open **Settings -> Advanced -> Developer mode** (turn it ON).
    - Open **Plugins -> Load unpacked plugin**.
-   - Select this folder (`e:\Nexus\logseq`).
+   - Select the cloned plugin folder (`logseq-deep-jump`).
