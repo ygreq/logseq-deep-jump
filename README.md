@@ -50,6 +50,10 @@ If this plugin helps your workflow, consider supporting future updates:
   <a href="https://paypal.me/ygreqro" target="_blank">
     <img src="https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white" height="44" alt="PayPal" />
   </a>
+  &nbsp;
+  <a href="https://revolut.me/ygreqro" target="_blank">
+    <img src="https://img.shields.io/badge/Revolut-191C1F?style=for-the-badge&logo=revolut&logoColor=white" height="44" alt="Revolut" />
+  </a>
 </p>
 
-Direct links: [buymeacoffee.com/ygreq](https://www.buymeacoffee.com/ygreq) | [paypal.me/ygreqro](https://paypal.me/ygreqro)
+Direct links: [buymeacoffee.com/ygreq](https://www.buymeacoffee.com/ygreq) | [paypal.me/ygreqro](https://paypal.me/ygreqro) | [revolut.me/ygreqro](https://revolut.me/ygreqro)
