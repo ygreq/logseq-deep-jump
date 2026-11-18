@@ -135,6 +135,21 @@ function ensureModalStyles(doc: Document): void {
       border-radius: 2px;
       padding: 0 2px;
     }
+    .dj-load-more {
+      width: 100%;
+      padding: 8px 12px;
+      margin-top: 4px;
+      border-radius: 6px;
+      border: 1px solid var(--ls-border-color, #d1d5db);
+      background: var(--ls-secondary-background-color, #f9fafb);
+      color: var(--ls-link-text-color, #2563eb);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .dj-load-more:hover {
+      background: var(--ls-tertiary-background-color, rgba(59, 130, 246, 0.12));
+    }
     .dj-footer {
       display: flex;
       justify-content: space-between;
@@ -164,6 +179,8 @@ export async function openSearchModal(defaultCurrentPageOnly = false): Promise<v
 
   let currentPageOnly = defaultCurrentPageOnly && Boolean(currentPageName);
   let results: SearchResult[] = [];
+  let totalMatches = 0;
+  let visibleLimit = 100;
   let selectedIndex = 0;
   let debounceTimer: number | undefined;
 
@@ -195,11 +212,24 @@ export async function openSearchModal(defaultCurrentPageOnly = false): Promise<v
   const statusEl = overlay.querySelector<HTMLDivElement>('.dj-status')!;
   const listEl = overlay.querySelector<HTMLUListElement>('.dj-list')!;
 
+  const updateStatus = () => {
+    if (results.length === 0) {
+      statusEl.textContent = 'No matching blocks found.';
+      return;
+    }
+    const shown = Math.min(visibleLimit, results.length);
+    statusEl.textContent =
+      totalMatches > shown
+        ? `Found ${totalMatches} block(s) - showing ${shown}`
+        : `Found ${totalMatches} block(s)`;
+  };
+
   const renderList = () => {
     listEl.innerHTML = '';
     const query = input.value;
+    const slice = results.slice(0, visibleLimit);
 
-    results.forEach((item, idx) => {
+    slice.forEach((item, idx) => {
       const li = doc.createElement('li');
       li.className = `dj-item${idx === selectedIndex ? ' selected' : ''}`;
       li.innerHTML = `
@@ -212,6 +242,20 @@ export async function openSearchModal(defaultCurrentPageOnly = false): Promise<v
       listEl.appendChild(li);
     });
 
+    if (results.length > visibleLimit) {
+      const btn = doc.createElement('button');
+      btn.type = 'button';
+      btn.className = 'dj-load-more';
+      const remaining = results.length - visibleLimit;
+      btn.textContent = `Show ${Math.min(100, remaining)} more (${remaining} remaining)`;
+      btn.addEventListener('click', () => {
+        visibleLimit += 100;
+        updateStatus();
+        renderList();
+      });
+      listEl.appendChild(btn);
+    }
+
     const active = listEl.children[selectedIndex] as HTMLElement | undefined;
     active?.scrollIntoView({ block: 'nearest' });
   };
@@ -220,6 +264,8 @@ export async function openSearchModal(defaultCurrentPageOnly = false): Promise<v
     const q = input.value.trim();
     if (!q) {
       results = [];
+      totalMatches = 0;
+      visibleLimit = 100;
       selectedIndex = 0;
       statusEl.textContent = 'Type to search blocks...';
       renderList();
@@ -229,16 +275,17 @@ export async function openSearchModal(defaultCurrentPageOnly = false): Promise<v
     statusEl.textContent = 'Searching...';
     const scopePage = currentPageOnly ? currentPageName : undefined;
     try {
-      results = await searchBlocks(q, scopePage);
+      const res = await searchBlocks(q, scopePage);
+      results = res.results;
+      totalMatches = res.total;
+      visibleLimit = 100;
       selectedIndex = 0;
-      statusEl.textContent =
-        results.length === 0
-          ? 'No matching blocks found.'
-          : `Found ${results.length}${results.length >= 80 ? '+' : ''} block(s)`;
+      updateStatus();
       renderList();
     } catch (err) {
       console.error('[Deep Jump] Search failed:', err);
       results = [];
+      totalMatches = 0;
       statusEl.textContent = `Search error: ${err instanceof Error ? err.message : String(err)}`;
       renderList();
     }
@@ -274,14 +321,16 @@ export async function openSearchModal(defaultCurrentPageOnly = false): Promise<v
       closeSearchModal();
     } else if (ev.key === 'ArrowDown') {
       ev.preventDefault();
-      if (results.length > 0) {
-        selectedIndex = (selectedIndex + 1) % results.length;
+      const maxShown = Math.min(visibleLimit, results.length);
+      if (maxShown > 0) {
+        selectedIndex = (selectedIndex + 1) % maxShown;
         renderList();
       }
     } else if (ev.key === 'ArrowUp') {
       ev.preventDefault();
-      if (results.length > 0) {
-        selectedIndex = (selectedIndex - 1 + results.length) % results.length;
+      const maxShown = Math.min(visibleLimit, results.length);
+      if (maxShown > 0) {
+        selectedIndex = (selectedIndex - 1 + maxShown) % maxShown;
         renderList();
       }
     } else if (ev.key === 'Enter' && results[selectedIndex]) {

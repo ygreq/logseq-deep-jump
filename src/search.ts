@@ -10,6 +10,11 @@ export interface SearchResult {
   journalDay?: number;
 }
 
+export interface SearchResponse {
+  results: SearchResult[];
+  total: number;
+}
+
 const pageCache = new Map<number, PageEntity>();
 
 async function resolvePage(pageId: number): Promise<PageEntity | null> {
@@ -24,25 +29,25 @@ async function resolvePage(pageId: number): Promise<PageEntity | null> {
 
 /**
  * Search blocks using Logseq's native query engine (`logseq.DB.q`),
- * which is much faster and more reliable than scanning all blocks in DataScript.
+ * returning all matches sorted newest-first (no 10-result UI cap).
  */
 export async function searchBlocks(
   rawQuery: string,
   onlyPageName?: string,
-  limit = 80
-): Promise<SearchResult[]> {
+  maxResults = 5000
+): Promise<SearchResponse> {
   const terms = rawQuery
     .trim()
     .split(/\s+/)
     .filter(Boolean);
 
   if (terms.length === 0) {
-    return [];
+    return { results: [], total: 0 };
   }
 
   // Fast path: when scoped to a single page, search its block tree directly
   if (onlyPageName) {
-    return searchInSinglePage(onlyPageName, terms, limit);
+    return searchInSinglePage(onlyPageName, terms, maxResults);
   }
 
   // Build a Logseq simple query: (and "term1" "term2" ...)
@@ -89,8 +94,6 @@ export async function searchBlocks(
       isJournal,
       journalDay,
     });
-
-    if (results.length >= limit * 2) break;
   }
 
   results.sort((a, b) => {
@@ -100,7 +103,10 @@ export async function searchBlocks(
     return a.originalName.localeCompare(b.originalName);
   });
 
-  return results.slice(0, limit);
+  return {
+    results: results.slice(0, maxResults),
+    total: results.length,
+  };
 }
 
 /**
@@ -109,11 +115,11 @@ export async function searchBlocks(
 export async function searchInSinglePage(
   pageName: string,
   terms: string[],
-  limit = 80
-): Promise<SearchResult[]> {
+  maxResults = 5000
+): Promise<SearchResponse> {
   const page = await logseq.Editor.getPage(pageName);
   const tree = await logseq.Editor.getPageBlocksTree(pageName);
-  if (!tree || tree.length === 0) return [];
+  if (!tree || tree.length === 0) return { results: [], total: 0 };
 
   const lowerTerms = terms.map((t) =>
     (t.startsWith('#') && t.length > 1 ? t.slice(1) : t).toLowerCase()
@@ -122,7 +128,6 @@ export async function searchInSinglePage(
   const results: SearchResult[] = [];
   const walk = (nodes: BlockEntity[]) => {
     for (const node of nodes) {
-      if (results.length >= limit) return;
       if (node.uuid && node.content) {
         const lower = node.content.toLowerCase();
         if (lowerTerms.every((t) => lower.includes(t))) {
@@ -143,7 +148,10 @@ export async function searchInSinglePage(
   };
 
   walk(tree);
-  return results;
+  return {
+    results: results.slice(0, maxResults),
+    total: results.length,
+  };
 }
 
 function normalizeForMatch(text: string): string {
