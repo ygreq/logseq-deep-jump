@@ -177,10 +177,16 @@ export async function openSearchModal(defaultCurrentPageOnly = false): Promise<v
   const currentPageName =
     currentPage && 'name' in currentPage ? String(currentPage.name) : undefined;
 
+  const rawBatch = Number(logseq.settings?.resultsPerPage);
+  const batchSize =
+    Number.isFinite(rawBatch) && rawBatch >= 10
+      ? Math.min(Math.floor(rawBatch), 2000)
+      : 100;
+
   let currentPageOnly = defaultCurrentPageOnly && Boolean(currentPageName);
   let results: SearchResult[] = [];
   let totalMatches = 0;
-  let visibleLimit = 100;
+  let visibleLimit = batchSize;
   let selectedIndex = 0;
   let debounceTimer: number | undefined;
 
@@ -247,9 +253,9 @@ export async function openSearchModal(defaultCurrentPageOnly = false): Promise<v
       btn.type = 'button';
       btn.className = 'dj-load-more';
       const remaining = results.length - visibleLimit;
-      btn.textContent = `Show ${Math.min(100, remaining)} more (${remaining} remaining)`;
+      btn.textContent = `Show ${Math.min(batchSize, remaining)} more (${remaining} remaining)`;
       btn.addEventListener('click', () => {
-        visibleLimit += 100;
+        visibleLimit += batchSize;
         updateStatus();
         renderList();
       });
@@ -265,7 +271,7 @@ export async function openSearchModal(defaultCurrentPageOnly = false): Promise<v
     if (!q) {
       results = [];
       totalMatches = 0;
-      visibleLimit = 100;
+      visibleLimit = batchSize;
       selectedIndex = 0;
       statusEl.textContent = 'Type to search blocks...';
       renderList();
@@ -278,7 +284,7 @@ export async function openSearchModal(defaultCurrentPageOnly = false): Promise<v
       const res = await searchBlocks(q, scopePage);
       results = res.results;
       totalMatches = res.total;
-      visibleLimit = 100;
+      visibleLimit = batchSize;
       selectedIndex = 0;
       updateStatus();
       renderList();

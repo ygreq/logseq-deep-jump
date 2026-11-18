@@ -48,6 +48,14 @@ async function main(): Promise<void> {
       description:
         'When Logseq navigates to a page with a block anchor and fails to scroll to it, automatically force-load and scroll to that block.',
     },
+    {
+      key: 'resultsPerPage',
+      type: 'number',
+      default: 100,
+      title: 'Results per page (Deep Jump modal)',
+      description:
+        'Number of matching blocks to show per batch in the Deep Jump search modal (e.g. 50, 100, 150).',
+    },
   ]);
 
   logseq.provideModel({
